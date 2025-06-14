@@ -1,0 +1,72 @@
+import numpy as np
+import pandas as pd
+import time
+from datetime import datetime
+from brainflow.data_filter import DataFilter, FilterTypes, WindowOperations
+import matplotlib.pyplot as plt
+
+# -------- SIMULATION PARAMETERS --------
+sampling_rate = 250  # Hz
+window_size = 2  # seconds
+num_samples = sampling_rate * window_size
+simulated_runtime_sec = 10  # How long to run the simulation
+
+# -------- GENERATE DUMMY EEG SIGNAL --------
+def generate_dummy_eeg(num_samples, sampling_rate):
+    t = np.linspace(0, window_size, num_samples, endpoint=False)
+    # Combine sine waves in alpha (10 Hz) and beta (20 Hz) bands
+    alpha_wave = np.sin(2 * np.pi * 10 * t)  # 10 Hz = alpha
+    beta_wave = 0.5 * np.sin(2 * np.pi * 20 * t)  # 20 Hz = beta
+    noise = 0.2 * np.random.randn(num_samples)
+    return alpha_wave + beta_wave + noise
+
+# -------- FUNCTION TO COMPUTE BAND POWER --------
+def compute_band_power(data, low, high):
+    psd, freqs = DataFilter.get_psd_welch(
+        data, nfft=256, overlap=128, sampling_rate=sampling_rate,
+        window=WindowOperations.HANNING.value
+    )
+    band_indices = np.where((freqs >= low) & (freqs <= high))
+    return np.sum(psd[band_indices])
+
+# -------- MAIN SIMULATION LOOP --------
+log_df = pd.DataFrame(columns=["Timestamp", "Alpha", "Beta", "Beta/Alpha Ratio"])
+start_time = time.time()
+
+print("Simulating attention monitoring...\n")
+
+try:
+    while time.time() - start_time < simulated_runtime_sec:
+        eeg_data = generate_dummy_eeg(num_samples, sampling_rate)
+
+        # Optional: Filter to isolate clean alpha/beta bands
+        alpha_power = compute_band_power(eeg_data, 8.0, 13.0)
+        beta_power = compute_band_power(eeg_data, 13.0, 30.0)
+
+
+        ratio = beta_power / alpha_power if alpha_power > 0 else 0
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        print(f"[{now}] Alpha: {alpha_power:.2f}, Beta: {beta_power:.2f}, Ratio: {ratio:.2f}")
+
+        # Save to log
+        log_df.loc[len(log_df)] = [now, alpha_power, beta_power, ratio]
+
+        time.sleep(window_size)
+
+except KeyboardInterrupt:
+    print("Interrupted by user.")
+
+# -------- EXPORT TO EXCEL --------
+excel_file = "simulated_attention_log.xlsx"
+log_df.to_excel(excel_file, index=False)
+print(f"\n✅ Simulated data saved to: {excel_file}")
+
+# -------- PLOT --------
+plt.figure(figsize=(10, 5))
+plt.plot(pd.to_datetime(log_df["Timestamp"]), log_df["Beta/Alpha Ratio"], marker='o')
+plt.title("Simulated Attention (Beta/Alpha Ratio)")
+plt.ylabel("Attention Ratio")
+plt.xlabel("Time")
+plt.grid(True)
+plt.tight_layout()
+plt.show()
