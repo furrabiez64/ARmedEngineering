@@ -1,12 +1,29 @@
 import time
 import numpy as np
+import matplotlib.pyplot as plt
 from brainflow.board_shim import BoardShim, BrainFlowInputParams
 from brainflow.data_filter import DataFilter, FilterTypes, WindowOperations
+import pandas as pd
+import serial  # Fix for NameError: name 'serial' is not defined
+import serial.tools.list_ports  # For automatic port detection
+
+
+# Check available ports
+def select_serial_port():
+    ports = list(serial.tools.list_ports.comports())
+    if not ports:
+        raise Exception("No serial ports found. Please connect your EEG device.")
+    print("Available Serial Ports:")
+    for i, port in enumerate(ports):
+        print(f"{i}: {port.device}")
+    selection = int(input("Select the port number for your EEG device: "))
+    return ports[selection].device
+
 
 # -------- SETUP PARAMETERS --------
 board_id = 57  # NeuroPawn Knightboard
 params = BrainFlowInputParams()
-params.serial_port = "COM3"  # Change this to match your actual COM port
+params.serial_port = select_serial_port()  # Dynamically detected
 
 # Start session
 BoardShim.enable_dev_board_logger()
@@ -38,6 +55,7 @@ def compute_attention(channel_data):
 
 # -------- REAL-TIME LOOP --------
 print("Starting real-time attention monitoring...\nPress Ctrl+C to stop.")
+log_df = pd.DataFrame(columns=["Timestamp", "Attention"])
 try:
     while True:
         # Wait to accumulate enough data
@@ -64,3 +82,19 @@ except KeyboardInterrupt:
 finally:
     board.stop_stream()
     board.release_session()
+    log_df.to_excel("attention_log.xlsx", index=False)
+    # Save Excel log
+    log_df.to_excel("attention_log.xlsx", index=False)
+    print("✅ Log saved to attention_log.xlsx")
+
+    # Plot results
+    log_df["Timestamp"] = pd.to_datetime(log_df["Timestamp"])
+    plt.figure(figsize=(10, 5))
+    plt.plot(log_df["Timestamp"], log_df["Attention"], marker='o')
+    plt.title("Attention Over Time")
+    plt.xlabel("Time")
+    plt.ylabel("Beta/Alpha Ratio")
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+
